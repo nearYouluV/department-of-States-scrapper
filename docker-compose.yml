@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
   db:
     image: postgres:15
@@ -37,15 +35,15 @@ services:
       - ./logs:/app/logs
     restart: on-failure
 
-volumes:
-  pgdata:
-    driver: local
-
-# FOR PROD 
 # volumes:
 #   pgdata:
 #     driver: local
-#     driver_opts:
-#       type: none
-#       device: /mnt/disks/my_pg_disk
-#       o: bind
+
+# FOR PROD 
+volumes:
+  pgdata:
+    driver: local
+    driver_opts:
+      type: none
+      device: /mnt/postgres_data/pg_data
+      o: bind
