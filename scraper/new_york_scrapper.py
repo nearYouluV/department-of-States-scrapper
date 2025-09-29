@@ -6,8 +6,11 @@ from models import Company
 from logger import logger
 from dotenv import load_dotenv
 import os
+from models import Base, engine  # Base = declarative_base()
+
+
 load_dotenv()
-MAX_CONCURRENT_REQUESTS = 25
+MAX_CONCURRENT_REQUESTS = 15
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 cookies = {
@@ -171,8 +174,15 @@ async def get_detailed_entity_data(session: aiohttp.ClientSession, entity):
         return None
 
 
+
+
+async def init_db():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 # ---------------- Runner ----------------
 async def main():
+    await init_db()
+    # PREFIXES = PREFIXES[:100]
     timeout = aiohttp.ClientTimeout(total=60)
     async with aiohttp.ClientSession(timeout=timeout) as session:
         tasks = [
