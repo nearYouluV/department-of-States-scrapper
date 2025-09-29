@@ -5,3 +5,5 @@ logs/
 .env
 *.log
 export_data.py
+*.csv
+*.json
