@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pdb
+
+# virtual environment
+.venv/
+
+# Environment variables
+.env
+
+# Git
+.git
+.gitignore
+
+*.log
+*.sqlite3
