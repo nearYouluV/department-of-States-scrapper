@@ -55,7 +55,6 @@ async def get_entities_data(session: aiohttp.ClientSession, prefix: str):
         ],
         "listPaginationInfo": {"listStartRecord": 1, "listEndRecord": 50},
     }
-    logger.info("Fetching entities for prefix: %s", prefix)
     url = "https://apps.dos.ny.gov/PublicInquiryWeb/api/PublicInquiry/GetComplexSearchMatchingEntities"
     data = await post_json(
         session, url, json_data, headers=headers, cookies=cookies, semaphore=semaphore
@@ -220,23 +219,19 @@ async def main():
     async with aiohttp.ClientSession(timeout=timeout) as session, async_session() as db:
         last_prefix = await load_checkpoint(db)
         start_index = 0
+        last_prefix = 'SH4'
         if last_prefix and last_prefix in PREFIXES:
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
-        tasks = []
-        for i, prefix in enumerate(PREFIXES[start_index:], start=start_index):
-            tasks.append(get_entities_data(session, prefix))
 
-        # Виконаємо всі разом
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-
-        # Обробимо результати
-        for prefix, result in zip(PREFIXES[start_index:], results):
-            if isinstance(result, Exception):
-                logger.exception("Error on prefix %s: %s", prefix, result)
-            else:
+        # Використовуємо семафор для обмеження одночасних префіксів
+        async def sem_task(prefix):
+            async with semaphore:
+                await get_entities_data(session, prefix)
                 await save_checkpoint(db, prefix)
 
+        for prefix in PREFIXES[start_index:]:
+            await sem_task(prefix)
 
 if __name__ == "__main__":
     asyncio.run(main())
