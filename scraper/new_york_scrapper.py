@@ -10,7 +10,7 @@ from models import Base, engine  # Base = declarative_base()
 
 
 load_dotenv()
-MAX_CONCURRENT_REQUESTS = 15
+MAX_CONCURRENT_REQUESTS = 8
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 cookies = {
@@ -67,8 +67,8 @@ async def get_entities_data(session: aiohttp.ClientSession, prefix: str):
         logger.info("Empty searchResultList for prefix %s", prefix)
         return
 
-    # filter recent by initialFilingDate (yesterday or today)
-    cutoff = datetime.now().date() - timedelta(days=1)
+    # filter recent by initialFilingDate (last 7 days)
+    cutoff = datetime.now().date() - timedelta(days=7)
     entities = []
     for entity in raw_list:
         try:
