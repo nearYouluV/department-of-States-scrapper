@@ -1,12 +1,14 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone, date
 import aiohttp
 from scraper.config import PREFIXES, parse_date, post_json, safe_get, persist_companies
-from models import Company
+from models import Company, ScraperCheckpoint, async_session
 from logger import logger
 from dotenv import load_dotenv
 import os
 from models import Base, engine  # Base = declarative_base()
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 
 load_dotenv()
@@ -174,28 +176,52 @@ async def get_detailed_entity_data(session: aiohttp.ClientSession, entity):
         return None
 
 
+async def load_checkpoint(session: AsyncSession):
+    result = await session.execute(select(ScraperCheckpoint).where(ScraperCheckpoint.id == f"daily_{date.today()}_newyork"))
+    checkpoint = result.scalar_one_or_none()
+    if checkpoint and checkpoint.updated_at == date.today():
+        return checkpoint.last_prefix
+    return None  
 
+async def save_checkpoint(session: AsyncSession, prefix: str):
+    result = await session.execute(select(ScraperCheckpoint).where(ScraperCheckpoint.id == f"daily_{date.today()}_newyork"))
+    checkpoint = result.scalar_one_or_none()
+    if checkpoint:
+        checkpoint.last_prefix = prefix
+        checkpoint.updated_at = date.today()
+    else:
+        checkpoint = ScraperCheckpoint(id=f"daily_{date.today()}_newyork", last_prefix=prefix, updated_at=date.today())
+        session.add(checkpoint)
+    await session.commit()
 
 async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+
+
 # ---------------- Runner ----------------
 async def main():
     await init_db()
-    # PREFIXES = PREFIXES[:100]
     timeout = aiohttp.ClientTimeout(total=60)
-    async with aiohttp.ClientSession(timeout=timeout) as session:
-        tasks = [
-            asyncio.create_task(get_entities_data(session, prefix))
-            for prefix in PREFIXES
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        # log exceptions if any
-        for r in results:
-            if isinstance(r, Exception):
-                logger.warning("Top-level task raised: %s", r)
-    logger.info("All done!")
+    async with aiohttp.ClientSession(timeout=timeout) as session, async_session() as db:
+        last_prefix = await load_checkpoint(db)
+        start_index = 0
+        if last_prefix and last_prefix in PREFIXES:
+            start_index = PREFIXES.index(last_prefix) + 1
+            logger.info("Resuming from prefix %s", last_prefix)
+        tasks = []
+        for i, prefix in enumerate(PREFIXES[start_index:], start=start_index):
+            tasks.append(get_entities_data(session, prefix))
 
+        # Виконаємо всі разом
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        # Обробимо результати
+        for prefix, result in zip(PREFIXES[start_index:], results):
+            if isinstance(result, Exception):
+                logger.exception("Error on prefix %s: %s", prefix, result)
+            else:
+                await save_checkpoint(db, prefix)
 
 if __name__ == "__main__":
     asyncio.run(main())
