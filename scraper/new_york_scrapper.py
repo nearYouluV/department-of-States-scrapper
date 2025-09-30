@@ -6,7 +6,7 @@ from models import Company, ScraperCheckpoint, async_session
 from logger import logger
 from dotenv import load_dotenv
 import os
-from models import Base, engine  # Base = declarative_base()
+from models import Base, engine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
@@ -177,22 +177,36 @@ async def get_detailed_entity_data(session: aiohttp.ClientSession, entity):
 
 
 async def load_checkpoint(session: AsyncSession):
-    result = await session.execute(select(ScraperCheckpoint).where(ScraperCheckpoint.id == f"daily_{date.today()}_newyork"))
+    result = await session.execute(
+        select(ScraperCheckpoint).where(
+            ScraperCheckpoint.id == f"daily_{date.today()}_newyork"
+        )
+    )
     checkpoint = result.scalar_one_or_none()
     if checkpoint and checkpoint.updated_at == date.today():
         return checkpoint.last_prefix
-    return None  
+    return None
+
 
 async def save_checkpoint(session: AsyncSession, prefix: str):
-    result = await session.execute(select(ScraperCheckpoint).where(ScraperCheckpoint.id == f"daily_{date.today()}_newyork"))
+    result = await session.execute(
+        select(ScraperCheckpoint).where(
+            ScraperCheckpoint.id == f"daily_{date.today()}_newyork"
+        )
+    )
     checkpoint = result.scalar_one_or_none()
     if checkpoint:
         checkpoint.last_prefix = prefix
         checkpoint.updated_at = date.today()
     else:
-        checkpoint = ScraperCheckpoint(id=f"daily_{date.today()}_newyork", last_prefix=prefix, updated_at=date.today())
+        checkpoint = ScraperCheckpoint(
+            id=f"daily_{date.today()}_newyork",
+            last_prefix=prefix,
+            updated_at=date.today(),
+        )
         session.add(checkpoint)
     await session.commit()
+
 
 async def init_db():
     async with engine.begin() as conn:
@@ -222,6 +236,7 @@ async def main():
                 logger.exception("Error on prefix %s: %s", prefix, result)
             else:
                 await save_checkpoint(db, prefix)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
