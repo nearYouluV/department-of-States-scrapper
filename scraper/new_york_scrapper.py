@@ -248,11 +248,14 @@ async def main():
     logger.info("Daily export finished for %s companies", len(all_companies))
     # delete checkpoint after successful run
     async with async_session() as db:
+        checkpoint_id = f"daily_{date.today()}_newyork"
         await db.execute(
             text("DELETE FROM scraper_checkpoints WHERE id = :id"),
-            {"id": f"daily_{date.today()}_newyork"},
+            {"id": checkpoint_id},
         )
         await db.commit()
+
+    logger.info("Scraping completed successfully, checkpoint cleared.")
 
 if __name__ == "__main__":
     asyncio.run(main())
