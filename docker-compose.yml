@@ -13,6 +13,8 @@ services:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    networks:
+      - scraper_network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
@@ -30,16 +32,20 @@ services:
     depends_on:
       db:
         condition: service_healthy
-
     volumes:
-      - ./logs:/app/logs
+      - /mnt/postgres_data/scraper_logs:/app/logs
+      - /mnt/postgres_data/scraper_data:/scraper_data
     restart: on-failure
+    networks:
+      - scraper_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' -X POST 'https://apps.dos.ny.gov/PublicInquiryWeb/api/PublicInquiry/GetComplexSearchMatchingEntities' -H 'Accept: application/json, text/plain, */*' -H 'Content-Type: application/json;charset=UTF-8' --data-raw '{\"searchValue\":\"ABC\",\"searchByTypeIndicator\":\"EntityName\",\"searchExpressionIndicator\":\"CONTAINS\",\"entityStatusIndicator\":\"AllStatuses\",\"entityTypeIndicator\":[\"Corporation\",\"LimitedLiabilityCompany\",\"LimitedPartnership\",\"LimitedLiabilityPartnership\"],\"listPaginationInfo\":{\"listStartRecord\":1,\"listEndRecord\":1}}' | grep -q 200"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
-# volumes:
-#   pgdata:
-#     driver: local
-
-# FOR PROD 
+# Volumes
 volumes:
   pgdata:
     driver: local
@@ -47,3 +53,8 @@ volumes:
       type: none
       device: /mnt/postgres_data/pg_data
       o: bind
+
+# Network
+networks:
+  scraper_network:
+    driver: bridge

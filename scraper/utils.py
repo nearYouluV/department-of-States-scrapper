@@ -9,7 +9,9 @@ import json
 import random
 from models import Company, async_session
 from sqlalchemy.dialects.postgresql import insert
+import pathlib
 
+TEMP_ERRORS_FILE = pathlib.Path("/tmp/crawl_errors_count_ny.txt")
 alphabet = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 &()-'./")
 def generate_prefixes():
     for combo in product(alphabet, repeat=3):
@@ -18,7 +20,6 @@ PREFIXES = list(generate_prefixes())
 
 # ---------------- Helpers ----------------
 def safe_get(d: dict, *keys, default=None):
-    """Безпечний доступ до вкладених ключів."""
     cur = d
     try:
         for k in keys:
@@ -30,7 +31,6 @@ def safe_get(d: dict, *keys, default=None):
         return default
 
 def parse_date(s):
-    """Тихий парсер ISO-подібних дат, повертає date або None."""
     if not s:
         return None
     try:
@@ -48,6 +48,22 @@ def parse_date(s):
                 continue
     return None
 
+def load_error_count() -> int:
+    if TEMP_ERRORS_FILE.exists():
+        try:
+            return int(TEMP_ERRORS_FILE.read_text())
+        except Exception:
+            return 0
+    return 0
+
+def save_error_count(count: int):
+    TEMP_ERRORS_FILE.write_text(str(count))
+
+def reset_error_count():
+    if TEMP_ERRORS_FILE.exists():
+        TEMP_ERRORS_FILE.unlink()
+
+        
 async def post_json(
     session: aiohttp.ClientSession,
     url: str,
@@ -58,10 +74,10 @@ async def post_json(
     headers=None,
     cookies=None,
     semaphore: Semaphore = Semaphore(10)
-) -> dict | list | None:
+) -> dict | list:
     """
     Robust POST + JSON parser with retries, exponential backoff, and semaphore limiting.
-    Returns parsed JSON (dict/list) or None if permanently failed.
+    Raises ClientError if permanently failed.
     """
     attempt = 0
     while attempt < max_retries:
@@ -74,45 +90,48 @@ async def post_json(
                             "Bad status %s for %s (attempt %d). Body starts: %.200s",
                             resp.status, url, attempt + 1, text
                         )
-                        # Retry on server errors
+                        # Retry only on server errors (5xx)
                         if 500 <= resp.status < 600:
-                            raise ClientError(f"Server error {resp.status}")
-                        return None
 
-                    # Try parsing JSON robustly
+                            raise ClientError(f"Server error {resp.status}")
+                        # For 4xx or other codes, fail immediately
+                        raise ClientError(f"Non-retriable status {resp.status}")
+
+                    # Parse JSON robustly
                     try:
                         data = await resp.json()
-                        if isinstance(data, (dict, list)):
-                            return data
-                        # if server returned string → probably timeout/error page
-                        logger.warning(
-                            "Received string response (likely timeout/error) for %s (attempt %d)", url, attempt + 1
-                        )
-                        raise ClientError("Response is not dict/list")
+                        if not isinstance(data, (dict, list)):
+                            raise ClientError("Response is not dict/list")
+                        return data
                     except ContentTypeError:
-                        # Sometimes server returns empty content-type but JSON in body
+                        # Fallback if content-type is wrong
                         try:
                             data = json.loads(text)
-                            if isinstance(data, (dict, list)):
-                                return data
+                            if not isinstance(data, (dict, list)):
+                                raise ClientError("Response is not dict/list")
+                            return data
                         except Exception:
-                            logger.warning(
-                                "Failed to parse body as JSON (ContentTypeError). Body starts: %.200s", text
-                            )
                             raise ClientError("Invalid JSON body")
         except (ClientError, asyncio.TimeoutError, aiohttp.ServerTimeoutError) as e:
             attempt += 1
-            backoff = base_backoff * (2 ** (attempt - 1)) + random.uniform(0, 0.3)
-            logger.warning(
-                "Request error to %s: %s — retry %d/%d after %.2fs", url, e, attempt, max_retries, backoff
-            )
-            await asyncio.sleep(backoff)
+            if attempt < max_retries:
+                backoff = base_backoff * (2 ** (attempt - 1)) + random.uniform(0, 0.3)
+                logger.warning(
+                    "Request error to %s: %s — retry %d/%d after %.2fs",
+                    url, e, attempt, max_retries, backoff
+                )
+                await asyncio.sleep(backoff)
+            else:
+                logger.error("Giving up on %s after %d attempts", url, max_retries)
+                current_errors = load_error_count()
+                save_error_count(current_errors + 1)
+                raise ClientError("Max retries exceeded")
         except Exception as e:
             logger.exception("Unexpected error while POSTing to %s: %s", url, e)
-            return None
+            current_errors = load_error_count()
+            save_error_count(current_errors + 1)
+            raise ClientError(f"Unexpected error: {e}")
 
-    logger.error("Giving up on %s after %d attempts", url, max_retries)
-    return None
 
 def to_utc(dt):
     if dt is None:
@@ -130,7 +149,6 @@ def to_utc(dt):
                 parsed = parsed.replace(tzinfo=timezone.utc)
             return parsed
         except ValueError:
-            # якщо рядок не в ISO форматі, можна просто пропустити або логувати
             return None
     return None
 

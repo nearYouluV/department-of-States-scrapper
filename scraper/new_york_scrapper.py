@@ -1,7 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone, date
 import aiohttp
-from scraper.config import PREFIXES, parse_date, post_json, safe_get, persist_companies
+from scraper.utils import PREFIXES, load_error_count, parse_date, post_json, reset_error_count, safe_get, persist_companies
 from models import Company, ScraperCheckpoint, async_session
 from logger import logger
 from dotenv import load_dotenv
@@ -9,6 +9,7 @@ import os
 from models import Base, engine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from exporter import generate_manifest
 
 
 load_dotenv()
@@ -57,7 +58,7 @@ async def get_entities_data(session: aiohttp.ClientSession, prefix: str):
     }
     url = "https://apps.dos.ny.gov/PublicInquiryWeb/api/PublicInquiry/GetComplexSearchMatchingEntities"
     data = await post_json(
-        session, url, json_data, headers=headers, cookies=cookies, semaphore=semaphore
+        session, url, json_data, headers=headers, cookies=cookies, semaphore=semaphore, max_retries=8
     )
     if not data:
         logger.warning("No data for prefix %s", prefix)
@@ -68,8 +69,8 @@ async def get_entities_data(session: aiohttp.ClientSession, prefix: str):
         logger.info("Empty searchResultList for prefix %s", prefix)
         return
 
-    # filter recent by initialFilingDate (last 7 days)
-    cutoff = datetime.now().date() - timedelta(days=7)
+    # filter recent by initialFilingDate (>= yesterday)
+    cutoff = datetime.now().date() - timedelta(days=1)
     entities = []
     for entity in raw_list:
         try:
@@ -214,24 +215,30 @@ async def init_db():
 
 # ---------------- Runner ----------------
 async def main():
+    start_time = datetime.now(timezone.utc)
     await init_db()
     timeout = aiohttp.ClientTimeout(total=60)
     async with aiohttp.ClientSession(timeout=timeout) as session, async_session() as db:
         last_prefix = await load_checkpoint(db)
         start_index = 0
-        last_prefix = 'SH4'
         if last_prefix and last_prefix in PREFIXES:
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
 
-        # Використовуємо семафор для обмеження одночасних префіксів
         async def sem_task(prefix):
             async with semaphore:
                 await get_entities_data(session, prefix)
                 await save_checkpoint(db, prefix)
+        try:
+            for prefix in PREFIXES[start_index:]:
+                await sem_task(prefix)
+        except Exception as e:
+            logger.error("Error occurred: %s", e)
+            raise 
 
-        for prefix in PREFIXES[start_index:]:
-            await sem_task(prefix)
+    crawl_errors = load_error_count()
+    reset_error_count()
+    await generate_manifest(all_companies=[], crawl_errors=crawl_errors, start_time=start_time)
 
 if __name__ == "__main__":
     asyncio.run(main())
