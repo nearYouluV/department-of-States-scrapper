@@ -1,34 +1,26 @@
 # exporter/daily_export.py
 import asyncio
 from datetime import datetime, timezone
+from sqlalchemy import text
 from models import Company, async_session
 from logger import logger
-from exporter.export_utils import export_data, generate_manifest, ensure_daily_folder
+from exporter.export_utils import export_data, generate_manifest, ensure_daily_folder, get_companies_for_today
 import os
 
 async def main():
     start_time = datetime.now(timezone.utc)
-    output_dir = ensure_daily_folder(state="NY")  # автоматично YYYY/MM/DD
+    output_dir = ensure_daily_folder(state="NY", base_dir="/app/data")
 
-    async with async_session() as session:
-        # Отримуємо всі компанії за сьогоднішній день
-        result = await session.execute(
-            """
-            SELECT * FROM companies
-            WHERE source_state = 'NY'
-            AND DATE(source_last_seen_at) = CURRENT_DATE
-            """
-        )
-        all_companies = result.scalars().all()
+    all_companies = await get_companies_for_today(session=async_session, state="NY")
 
     # Експортуємо CSV та NDJSON
     export_data(all_companies, output_dir)
 
     # Створюємо manifest.json
-    generate_manifest(
+    await generate_manifest(
         companies=all_companies,
         output_dir=output_dir,
-        crawl_errors=get_crawl_errors(),  # тут підключаємо логіку помилок через tmp файл
+        crawl_errors=get_crawl_errors(),  # підключаємо логіку помилок через tmp файл
         start_time=start_time
     )
 

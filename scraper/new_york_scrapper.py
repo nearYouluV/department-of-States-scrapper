@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta, timezone, date
 import aiohttp
+from sqlalchemy import text
 from scraper.utils import PREFIXES, load_error_count, parse_date, post_json, reset_error_count, safe_get, persist_companies
 from models import Company, ScraperCheckpoint, async_session
 from logger import logger
@@ -9,20 +10,20 @@ import os
 from models import Base, engine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from exporter import generate_manifest
+from exporter import get_companies_for_today, generate_manifest, ensure_daily_folder, export_data
 
 
 load_dotenv()
 MAX_CONCURRENT_REQUESTS = 8
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
-cookies = {
-    "TS00000000076": os.getenv("API_COOKIE_TS00000000076"),
-    "TSPD_101_DID": os.getenv("API_COOKIE_TSPD_101_DID"),
-    "TSPD_101": os.getenv("API_COOKIE_TSPD_101"),
-    "TS969a1eaa027": os.getenv("API_COOKIE_TS969a1eaa027"),
-    "TSbb0d7d7a077": os.getenv("API_COOKIE_TSbb0d7d7a077"),
-}
+# cookies = {
+#     "TS00000000076": os.getenv("API_COOKIE_TS00000000076"),
+#     "TSPD_101_DID": os.getenv("API_COOKIE_TSPD_101_DID"),
+#     "TSPD_101": os.getenv("API_COOKIE_TSPD_101"),
+#     "TS969a1eaa027": os.getenv("API_COOKIE_TS969a1eaa027"),
+#     "TSbb0d7d7a077": os.getenv("API_COOKIE_TSbb0d7d7a077"),
+# }
 
 headers = {
     "Accept": "application/json, text/plain, */*",
@@ -57,8 +58,11 @@ async def get_entities_data(session: aiohttp.ClientSession, prefix: str):
         "listPaginationInfo": {"listStartRecord": 1, "listEndRecord": 50},
     }
     url = "https://apps.dos.ny.gov/PublicInquiryWeb/api/PublicInquiry/GetComplexSearchMatchingEntities"
+    # data = await post_json(
+    #     session, url, json_data, headers=headers, cookies=cookies, semaphore=semaphore, max_retries=8
+    # )
     data = await post_json(
-        session, url, json_data, headers=headers, cookies=cookies, semaphore=semaphore, max_retries=8
+        session, url, json_data, headers=headers, semaphore=semaphore, max_retries=8
     )
     if not data:
         logger.warning("No data for prefix %s", prefix)
@@ -107,7 +111,7 @@ async def get_detailed_entity_data(session: aiohttp.ClientSession, entity):
             logger.warning("No detail for dosID %s", entity.get("dosID"))
             return None
 
-        # build Company-like object (you can keep your Company dataclass)
+        # build Company-like object
         company = Company(
             source_state="NY",
             entity_number=int(safe_get(data, "entityGeneralInfo", "dosID") or 0),
@@ -235,10 +239,13 @@ async def main():
         except Exception as e:
             logger.error("Error occurred: %s", e)
             raise 
-
+    output_dir = ensure_daily_folder(state="NY")
+    csv_file, ndjson_file = await asyncio.to_thread(export_data, all_companies, output_dir)
+    all_companies = await get_companies_for_today(session=async_session, state="NY")
     crawl_errors = load_error_count()
     reset_error_count()
-    await generate_manifest(all_companies=[], crawl_errors=crawl_errors, start_time=start_time)
+    await generate_manifest(all_companies=all_companies, crawl_errors=crawl_errors, start_time=start_time, output_dir=output_dir)
+    logger.info("Daily export finished for %s companies", len(all_companies))
 
 if __name__ == "__main__":
     asyncio.run(main())

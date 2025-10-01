@@ -8,6 +8,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get clean
 
 
 COPY scraper/ ./scraper/
+COPY exporter/ ./exporter/
 COPY models/ ./models/
 COPY logger.py ./logger.py
 

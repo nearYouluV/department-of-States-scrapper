@@ -6,19 +6,33 @@ from typing import List
 import pandas as pd
 from models import Company
 from logger import logger
-# ---------------- Daily Folder ----------------
-def ensure_daily_folder(state: str) -> Path:
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+
+async def get_companies_for_today(session: AsyncSession, state: str = "NY") -> List[dict]:
     """
-    Створює щоденну папку за шаблоном: state_new_business/YYYY/MM/DD/
-    Повертає Path до цієї папки.
+    """
+    query = text("""
+        SELECT * FROM companies
+        WHERE source_state = :state
+        AND DATE(source_last_seen_at) = CURRENT_DATE
+    """)
+    result = await session.execute(query, {"state": state})
+    companies = result.mappings().all()  # список словників
+    return companies
+
+# ---------------- Daily Folder ----------------
+def ensure_daily_folder(state: str, base_dir: str = "/app/data") -> Path:
+    """
+    {base_dir}/{state_lower}_new_business/YYYY/MM/DD
     """
     today = datetime.utcnow()
-    daily_folder = Path(f"{state}_new_business") / f"{today:%Y/%m/%d}"
+    daily_folder = Path(base_dir) / f"{state.lower()}_new_business" / f"{today:%Y/%m/%d}"
     daily_folder.mkdir(parents=True, exist_ok=True)
     return daily_folder
 
 # ---------------- Export CSV + NDJSON ----------------
-def export_data(companies: List[dict], output_dir: str, prefix: str):
+def export_data(companies: List[dict], output_dir: str, prefix: str = "entities") -> tuple[Path, Path]:
     """
     Exports list of company dicts to CSV and NDJSON using pandas.
     Returns tuple of file paths.
@@ -30,6 +44,7 @@ def export_data(companies: List[dict], output_dir: str, prefix: str):
     ndjson_file = output_dir / f"{prefix}.ndjson"
 
     if not companies:
+        logger.error("No companies found for export")
         return csv_file, ndjson_file
 
     # DataFrame
@@ -52,31 +67,6 @@ def sha256_file(file_path: Path) -> str:
             h.update(chunk)
     return h.hexdigest()
 
-def create_manifest_and_checksums(files: list[Path], base_dir: str):
-    """
-    Creates manifest.json and checksums.sha256 for given files in Daily Folder Layout.
-    Returns folder path, manifest file path, and checksums file path.
-    """
-    folder = ensure_daily_folder(base_dir)
-
-    # manifest.json
-    manifest_file = folder / "manifest.json"
-    manifest = [f.name for f in files]
-    with manifest_file.open("w", encoding="utf-8") as f:
-        json.dump(manifest, f, indent=2)
-
-    # checksums.sha256
-    checksums_file = folder / "checksums.sha256"
-    with checksums_file.open("w", encoding="utf-8") as f:
-        for file in files:
-            checksum = sha256_file(file)
-            f.write(f"{checksum}  {file.name}\n")
-
-    return folder, manifest_file, checksums_file
-
-
-
-
 
 def write_manifest(
     source_state: str,
@@ -89,19 +79,16 @@ def write_manifest(
     crawl_duration_seconds: float,
     crawl_errors_total: int,
     generator: str = "ny_scraper_v1",
-    base_dir: str = "/ny_new_business"
+    output_dir: str = "/ny_new_business"
 ):
     """
     Creates manifest.json in daily output folder (YYYY/MM/DD).
     Date is automatically today UTC.
     """
     now = datetime.now(timezone.utc)
-    year = now.strftime("%Y")
-    month = now.strftime("%m")
-    day = now.strftime("%d")
 
     # Daily folder path
-    output_dir = Path(base_dir) / source_state / year / month / day
+    output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     manifest = {
@@ -127,13 +114,13 @@ def write_manifest(
     return manifest_file
 
 
-async def generate_manifest(companies: list[Company], crawl_errors: int, start_time: datetime):
+async def generate_manifest(companies: list[Company], crawl_errors: int, start_time: datetime, output_dir: str = "/ny_new_business"):
     now = datetime.now(timezone.utc)
     crawl_duration_seconds = (now - start_time).total_seconds()
 
     entities_total = len(companies)
     # Припустимо, що officer_rows_total = sum of some field у company, для прикладу:
-    officer_rows_total = sum(len(c.previous_names) for c in companies)
+    officer_rows_total = 0
     pdfs_total = 0  # якщо у тебе нема PDF, поки 0
     officer_data_available = officer_rows_total  # приклад
     pdfs_available = 0  # приклад
@@ -150,7 +137,8 @@ async def generate_manifest(companies: list[Company], crawl_errors: int, start_t
         pdfs_available=pdfs_available,
         coverage_notes=coverage_notes,
         crawl_duration_seconds=crawl_duration_seconds,
-        crawl_errors_total=crawl_errors
+        crawl_errors_total=crawl_errors,
+        output_dir=output_dir
     )
 
     logger.info("Manifest created: %s", manifest_file)

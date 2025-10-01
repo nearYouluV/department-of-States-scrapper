@@ -35,7 +35,7 @@ services:
     volumes:
       - /mnt/postgres_data/scraper_logs:/app/logs
       - /mnt/postgres_data/scraper_data:/scraper_data
-    restart: on-failure
+    restart: unless-stopped
     networks:
       - scraper_network
     healthcheck:
