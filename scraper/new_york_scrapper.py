@@ -246,6 +246,13 @@ async def main():
     reset_error_count()
     await generate_manifest(all_companies=all_companies, crawl_errors=crawl_errors, start_time=start_time, output_dir=output_dir)
     logger.info("Daily export finished for %s companies", len(all_companies))
+    # delete checkpoint after successful run
+    async with async_session() as db:
+        await db.execute(
+            text("DELETE FROM scraper_checkpoints WHERE id = :id"),
+            {"id": f"daily_{date.today()}_newyork"},
+        )
+        await db.commit()
 
 if __name__ == "__main__":
     asyncio.run(main())
