@@ -234,11 +234,14 @@ async def main():
                 await get_entities_data(session, prefix)
                 await save_checkpoint(db, prefix)
         try:
+            tasks = []
             for prefix in PREFIXES[start_index:]:
-                await sem_task(prefix)
+                tasks.append(asyncio.create_task(sem_task(prefix)))
+
+            await asyncio.gather(*tasks)
         except Exception as e:
             logger.error("Error occurred: %s", e)
-            raise 
+            raise
     output_dir = ensure_daily_folder(state="NY")
     csv_file, ndjson_file = await asyncio.to_thread(export_data, all_companies, output_dir)
     all_companies = await get_companies_for_today(session=async_session, state="NY")
