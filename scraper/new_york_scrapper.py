@@ -223,43 +223,56 @@ async def main():
     timeout = aiohttp.ClientTimeout(total=60)
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
+        # Завантажуємо останній чекпойнт
         async with async_session() as db:
             last_prefix = await load_checkpoint(db)
 
+        # Визначаємо, з якого індексу почати
         start_index = 0
         if last_prefix and last_prefix in PREFIXES:
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
 
-        async def process_prefix(prefix):
-            async with semaphore:
-                try:
-                    await get_entities_data(session, prefix)
-                except Exception as e:
-                    logger.exception("Error processing prefix %s: %s", prefix, e)
-                finally:
-                    # Завжди зберігаємо чекпойнт після обробки
-                    async with async_session() as db:
-                        await save_checkpoint(db, prefix)
+        # Розбиваємо префікси на батчі
+        BATCH_SIZE = 5  # можна регулювати
+        batches = [
+            PREFIXES[i : i + BATCH_SIZE] for i in range(start_index, len(PREFIXES))
+        ]
 
-        queue = asyncio.Queue()
-        for prefix in PREFIXES[start_index:]:
-            queue.put_nowait(prefix)
+        # Обробка одного батча
+        async def process_batch(batch):
+            queue = asyncio.Queue()
+            for prefix in batch:
+                queue.put_nowait(prefix)
 
-        async def worker():
-            while not queue.empty():
-                prefix = await queue.get()
-                await process_prefix(prefix)
-                queue.task_done()
+            async def worker():
+                while not queue.empty():
+                    prefix = await queue.get()
+                    async with semaphore:
+                        try:
+                            await get_entities_data(session, prefix)
+                        except Exception as e:
+                            logger.exception("Error processing prefix %s: %s", prefix, e)
+                        finally:
+                            # Зберігаємо чекпойнт після кожного префіксу
+                            async with async_session() as db:
+                                await save_checkpoint(db, prefix)
+                    queue.task_done()
 
-        workers = [asyncio.create_task(worker()) for _ in range(MAX_CONCURRENT_REQUESTS)]
-        await queue.join()
-        for w in workers:
-            w.cancel()
+            workers = [asyncio.create_task(worker()) for _ in range(MAX_CONCURRENT_REQUESTS)]
+            await queue.join()
+            for w in workers:
+                w.cancel()
 
+        # Проходимо по всіх батчах
+        for batch in batches:
+            await process_batch(batch)
+
+    # Завантажуємо всі компанії за сьогодні
     async with async_session() as db:
         all_companies = await get_companies_for_today(session=db, state="NY")
 
+    # Експорт даних
     output_dir = ensure_daily_folder(state="NY")
     csv_file, ndjson_file = await asyncio.to_thread(export_data, all_companies, output_dir)
     crawl_errors = load_error_count()
@@ -273,6 +286,7 @@ async def main():
 
     logger.info("Daily export finished for %s companies", len(all_companies))
 
+    # Видаляємо чекпойнт після успішного завершення
     async with async_session() as db:
         checkpoint_id = f"daily_{date.today()}_newyork"
         await db.execute(
@@ -283,5 +297,6 @@ async def main():
 
     logger.info("Scraping completed successfully, checkpoint cleared.")
 
+    
 if __name__ == "__main__":
     asyncio.run(main())
