@@ -58,11 +58,11 @@ async def get_entities_data(session: aiohttp.ClientSession, prefix: str):
         "listPaginationInfo": {"listStartRecord": 1, "listEndRecord": 50},
     }
     url = "https://apps.dos.ny.gov/PublicInquiryWeb/api/PublicInquiry/GetComplexSearchMatchingEntities"
-    logger.info("Fetching entities for prefix: %s", prefix)
+    # logger.info("Fetching entities for prefix: %s", prefix)
     data = await post_json(
         session, url, json_data, headers=headers, cookies=cookies, semaphore=semaphore, max_retries=8
     )
-    logger.info("Fetched entities for prefix: %s", prefix)
+    # logger.info("Fetched entities for prefix: %s", prefix)
     if not data:
         logger.warning("No data for prefix %s", prefix)
         return
@@ -231,7 +231,7 @@ async def main():
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
 
-        BATCH_SIZE = 5  
+        BATCH_SIZE = 8  
         batches = [
             PREFIXES[i : i + BATCH_SIZE] for i in range(start_index, len(PREFIXES))
         ]
