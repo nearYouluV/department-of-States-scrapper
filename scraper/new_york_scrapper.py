@@ -228,10 +228,11 @@ async def main():
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
 
-        async def sem_task(prefix):
-            async with semaphore:
-                await get_entities_data(session, prefix)
-                await save_checkpoint(db, prefix)
+            async def sem_task(prefix):
+                async with semaphore:
+                    await get_entities_data(session, prefix)
+                    async with async_session() as db:
+                        await save_checkpoint(db, prefix)
         try:
             tasks = []
             for prefix in PREFIXES[start_index:]:
