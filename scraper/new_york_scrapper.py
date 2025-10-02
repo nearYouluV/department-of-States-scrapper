@@ -232,15 +232,35 @@ async def main():
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
 
-        async def sem_task(prefix):
+        # Робимо обмежену кількість одночасних префіксів
+        async def process_prefix(prefix):
             async with semaphore:
-                await get_entities_data(session, prefix)
-                async with async_session() as db:
-                    await save_checkpoint(db, prefix)
+                try:
+                    await get_entities_data(session, prefix)
+                except Exception as e:
+                    logger.exception("Error processing prefix %s: %s", prefix, e)
+                finally:
+                    # Завжди зберігаємо чекпойнт після обробки
+                    async with async_session() as db:
+                        await save_checkpoint(db, prefix)
 
-        tasks = [asyncio.create_task(sem_task(prefix)) for prefix in PREFIXES[start_index:]]
-        await asyncio.gather(*tasks)
+        # Створюємо таски та запускаємо по MAX_CONCURRENT_REQUESTS одночасно
+        queue = asyncio.Queue()
+        for prefix in PREFIXES[start_index:]:
+            queue.put_nowait(prefix)
 
+        async def worker():
+            while not queue.empty():
+                prefix = await queue.get()
+                await process_prefix(prefix)
+                queue.task_done()
+
+        workers = [asyncio.create_task(worker()) for _ in range(MAX_CONCURRENT_REQUESTS)]
+        await queue.join()
+        for w in workers:
+            w.cancel()
+
+    # Експорт результатів
     async with async_session() as db:
         all_companies = await get_companies_for_today(session=db, state="NY")
 
@@ -249,10 +269,16 @@ async def main():
 
     crawl_errors = load_error_count()
     reset_error_count()
-    await generate_manifest(all_companies=all_companies, crawl_errors=crawl_errors, start_time=start_time, output_dir=output_dir)
+    await generate_manifest(
+        all_companies=all_companies,
+        crawl_errors=crawl_errors,
+        start_time=start_time,
+        output_dir=output_dir,
+    )
 
     logger.info("Daily export finished for %s companies", len(all_companies))
 
+    # Очистка чекпойнта після успішного завершення
     async with async_session() as db:
         checkpoint_id = f"daily_{date.today()}_newyork"
         await db.execute(
@@ -262,7 +288,6 @@ async def main():
         await db.commit()
 
     logger.info("Scraping completed successfully, checkpoint cleared.")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
