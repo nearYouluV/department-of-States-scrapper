@@ -12,10 +12,6 @@ from sqlalchemy.dialects.postgresql import insert
 import pathlib
 from exporter import init_daily_errors_file
 TEMP_ERRORS_FILE = init_daily_errors_file(state="NY", base_dir="/tmp")
-# today_str = date.today().isoformat()  # '2025-10-02'
-# TEMP_ERRORS_FILE = pathlib.Path(f"/tmp/crawl_errors_count_ny_{today_str}.txt")
-# TEMP_ERRORS_FILE.touch(exist_ok=True)
-
 
 alphabet = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 &()-'./")
 def generate_prefixes():

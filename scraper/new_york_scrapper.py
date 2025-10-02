@@ -10,7 +10,7 @@ import os
 from models import Base, engine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from exporter import get_companies_for_today, generate_manifest, ensure_daily_folder, export_data
+from exporter import get_companies_for_today, generate_manifest, ensure_daily_folder, export_data, init_daily_errors_file
 
 
 load_dotenv()
@@ -218,7 +218,10 @@ async def init_db():
 
 # ---------------- Runner ----------------
 async def main():
-
+    daily_folder = ensure_daily_folder("NY")
+    errors_file = daily_folder / "crawl_errors_count_ny.txt"
+    errors_file.touch(exist_ok=True)  # створює файл, якщо його нема
+    print(errors_file)
     start_time = datetime.now(timezone.utc)
     await init_db()
     timeout = aiohttp.ClientTimeout(total=60)
