@@ -11,7 +11,7 @@ COPY scraper/ ./scraper/
 COPY exporter/ ./exporter/
 COPY models/ ./models/
 COPY logger.py ./logger.py
-
+COPY healthcheck.sh /usr/local/bin/healthcheck.sh
 ENV PYTHONUNBUFFERED=1
 
 CMD ["python", "-m", "scraper.new_york_scrapper"]
