@@ -221,35 +221,38 @@ async def main():
     start_time = datetime.now(timezone.utc)
     await init_db()
     timeout = aiohttp.ClientTimeout(total=60)
-    async with aiohttp.ClientSession(timeout=timeout) as session, async_session() as db:
-        last_prefix = await load_checkpoint(db)
+
+    async with aiohttp.ClientSession(timeout=timeout) as session:
+        # Завантаження чекпоінта
+        async with async_session() as db:
+            last_prefix = await load_checkpoint(db)
+
         start_index = 0
         if last_prefix and last_prefix in PREFIXES:
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
 
-            async def sem_task(prefix):
-                async with semaphore:
-                    await get_entities_data(session, prefix)
-                    async with async_session() as db:
-                        await save_checkpoint(db, prefix)
-        try:
-            tasks = []
-            for prefix in PREFIXES[start_index:]:
-                tasks.append(asyncio.create_task(sem_task(prefix)))
+        async def sem_task(prefix):
+            async with semaphore:
+                await get_entities_data(session, prefix)
+                async with async_session() as db:
+                    await save_checkpoint(db, prefix)
 
-            await asyncio.gather(*tasks)
-        except Exception as e:
-            logger.error("Error occurred: %s", e)
-            raise
+        tasks = [asyncio.create_task(sem_task(prefix)) for prefix in PREFIXES[start_index:]]
+        await asyncio.gather(*tasks)
+
+    async with async_session() as db:
+        all_companies = await get_companies_for_today(session=db, state="NY")
+
     output_dir = ensure_daily_folder(state="NY")
     csv_file, ndjson_file = await asyncio.to_thread(export_data, all_companies, output_dir)
-    all_companies = await get_companies_for_today(session=async_session, state="NY")
+
     crawl_errors = load_error_count()
     reset_error_count()
     await generate_manifest(all_companies=all_companies, crawl_errors=crawl_errors, start_time=start_time, output_dir=output_dir)
+
     logger.info("Daily export finished for %s companies", len(all_companies))
-    # delete checkpoint after successful run
+
     async with async_session() as db:
         checkpoint_id = f"daily_{date.today()}_newyork"
         await db.execute(
@@ -259,6 +262,7 @@ async def main():
         await db.commit()
 
     logger.info("Scraping completed successfully, checkpoint cleared.")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
