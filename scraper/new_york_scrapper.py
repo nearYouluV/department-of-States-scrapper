@@ -218,12 +218,12 @@ async def init_db():
 
 # ---------------- Runner ----------------
 async def main():
+
     start_time = datetime.now(timezone.utc)
     await init_db()
     timeout = aiohttp.ClientTimeout(total=60)
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        # Завантаження чекпоінта
         async with async_session() as db:
             last_prefix = await load_checkpoint(db)
 
@@ -232,7 +232,6 @@ async def main():
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
 
-        # Робимо обмежену кількість одночасних префіксів
         async def process_prefix(prefix):
             async with semaphore:
                 try:
@@ -244,7 +243,6 @@ async def main():
                     async with async_session() as db:
                         await save_checkpoint(db, prefix)
 
-        # Створюємо таски та запускаємо по MAX_CONCURRENT_REQUESTS одночасно
         queue = asyncio.Queue()
         for prefix in PREFIXES[start_index:]:
             queue.put_nowait(prefix)
@@ -260,13 +258,11 @@ async def main():
         for w in workers:
             w.cancel()
 
-    # Експорт результатів
     async with async_session() as db:
         all_companies = await get_companies_for_today(session=db, state="NY")
 
     output_dir = ensure_daily_folder(state="NY")
     csv_file, ndjson_file = await asyncio.to_thread(export_data, all_companies, output_dir)
-
     crawl_errors = load_error_count()
     reset_error_count()
     await generate_manifest(
@@ -278,7 +274,6 @@ async def main():
 
     logger.info("Daily export finished for %s companies", len(all_companies))
 
-    # Очистка чекпойнта після успішного завершення
     async with async_session() as db:
         checkpoint_id = f"daily_{date.today()}_newyork"
         await db.execute(

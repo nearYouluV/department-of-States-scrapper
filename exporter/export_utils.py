@@ -18,18 +18,30 @@ async def get_companies_for_today(session: AsyncSession, state: str = "NY") -> L
         AND DATE(source_last_seen_at) = CURRENT_DATE
     """)
     result = await session.execute(query, {"state": state})
-    companies = result.mappings().all()  # список словників
+    companies = result.mappings().all()  
     return companies
 
+
 # ---------------- Daily Folder ----------------
-def ensure_daily_folder(state: str, base_dir: str = "/app/data") -> Path:
+def ensure_daily_folder(state: str, base_dir: str = "/scraper_data") -> Path:
     """
     {base_dir}/{state_lower}_new_business/YYYY/MM/DD
     """
-    today = datetime.utcnow()
+    today = datetime.now(timezone.utc)
     daily_folder = Path(base_dir) / f"{state.lower()}_new_business" / f"{today:%Y/%m/%d}"
     daily_folder.mkdir(parents=True, exist_ok=True)
     return daily_folder
+
+def init_daily_errors_file(state: str, base_dir: str = "/scraper_data") -> Path:
+    """
+
+    """
+    daily_folder = ensure_daily_folder(state, base_dir=base_dir)
+    errors_file = daily_folder / "crawl_errors_count_ny.txt"
+    if not errors_file.exists():
+        errors_file.touch()
+    return errors_file
+
 
 # ---------------- Export CSV + NDJSON ----------------
 def export_data(companies: List[dict], output_dir: str, prefix: str = "entities") -> tuple[Path, Path]:
@@ -119,15 +131,13 @@ async def generate_manifest(companies: list[Company], crawl_errors: int, start_t
     crawl_duration_seconds = (now - start_time).total_seconds()
 
     entities_total = len(companies)
-    # Припустимо, що officer_rows_total = sum of some field у company, для прикладу:
     officer_rows_total = 0
-    pdfs_total = 0  # якщо у тебе нема PDF, поки 0
-    officer_data_available = officer_rows_total  # приклад
-    pdfs_available = 0  # приклад
+    pdfs_total = 0 
+    officer_data_available = officer_rows_total 
+    pdfs_available = 0 
 
     coverage_notes = "Includes Statements of Information (Initial + Amendments)"
 
-    # виклик функції з export_utils
     manifest_file = write_manifest(
         source_state="NY",
         entities_total=entities_total,
