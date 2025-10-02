@@ -17,13 +17,13 @@ load_dotenv()
 MAX_CONCURRENT_REQUESTS = 16
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
-# cookies = {
-#     "TS00000000076": os.getenv("API_COOKIE_TS00000000076"),
-#     "TSPD_101_DID": os.getenv("API_COOKIE_TSPD_101_DID"),
-#     "TSPD_101": os.getenv("API_COOKIE_TSPD_101"),
-#     "TS969a1eaa027": os.getenv("API_COOKIE_TS969a1eaa027"),
-#     "TSbb0d7d7a077": os.getenv("API_COOKIE_TSbb0d7d7a077"),
-# }
+cookies = {
+    "TS00000000076": os.getenv("API_COOKIE_TS00000000076"),
+    "TSPD_101_DID": os.getenv("API_COOKIE_TSPD_101_DID"),
+    "TSPD_101": os.getenv("API_COOKIE_TSPD_101"),
+    "TS969a1eaa027": os.getenv("API_COOKIE_TS969a1eaa027"),
+    "TSbb0d7d7a077": os.getenv("API_COOKIE_TSbb0d7d7a077"),
+}
 
 headers = {
     "Accept": "application/json, text/plain, */*",
@@ -58,12 +58,11 @@ async def get_entities_data(session: aiohttp.ClientSession, prefix: str):
         "listPaginationInfo": {"listStartRecord": 1, "listEndRecord": 50},
     }
     url = "https://apps.dos.ny.gov/PublicInquiryWeb/api/PublicInquiry/GetComplexSearchMatchingEntities"
-    # data = await post_json(
-    #     session, url, json_data, headers=headers, cookies=cookies, semaphore=semaphore, max_retries=8
-    # )
+    logger.info("Fetching entities for prefix: %s", prefix)
     data = await post_json(
-        session, url, json_data, headers=headers, semaphore=semaphore, max_retries=8
+        session, url, json_data, headers=headers, cookies=cookies, semaphore=semaphore, max_retries=8
     )
+    logger.info("Fetched entities for prefix: %s", prefix)
     if not data:
         logger.warning("No data for prefix %s", prefix)
         return
