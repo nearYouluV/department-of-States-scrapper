@@ -220,26 +220,22 @@ async def init_db():
 async def main():
     start_time = datetime.now(timezone.utc)
     await init_db()
-    timeout = aiohttp.ClientTimeout(total=60)
+    timeout = aiohttp.ClientTimeout(total=120)
 
     async with aiohttp.ClientSession(timeout=timeout) as session:
-        # Завантажуємо останній чекпойнт
         async with async_session() as db:
             last_prefix = await load_checkpoint(db)
 
-        # Визначаємо, з якого індексу почати
         start_index = 0
         if last_prefix and last_prefix in PREFIXES:
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
 
-        # Розбиваємо префікси на батчі
-        BATCH_SIZE = 5  # можна регулювати
+        BATCH_SIZE = 5  
         batches = [
             PREFIXES[i : i + BATCH_SIZE] for i in range(start_index, len(PREFIXES))
         ]
 
-        # Обробка одного батча
         async def process_batch(batch):
             queue = asyncio.Queue()
             for prefix in batch:
@@ -254,7 +250,6 @@ async def main():
                         except Exception as e:
                             logger.exception("Error processing prefix %s: %s", prefix, e)
                         finally:
-                            # Зберігаємо чекпойнт після кожного префіксу
                             async with async_session() as db:
                                 await save_checkpoint(db, prefix)
                     queue.task_done()
@@ -264,15 +259,12 @@ async def main():
             for w in workers:
                 w.cancel()
 
-        # Проходимо по всіх батчах
         for batch in batches:
             await process_batch(batch)
 
-    # Завантажуємо всі компанії за сьогодні
     async with async_session() as db:
         all_companies = await get_companies_for_today(session=db, state="NY")
 
-    # Експорт даних
     output_dir = ensure_daily_folder(state="NY")
     csv_file, ndjson_file = await asyncio.to_thread(export_data, all_companies, output_dir)
     crawl_errors = load_error_count()
@@ -286,7 +278,6 @@ async def main():
 
     logger.info("Daily export finished for %s companies", len(all_companies))
 
-    # Видаляємо чекпойнт після успішного завершення
     async with async_session() as db:
         checkpoint_id = f"daily_{date.today()}_newyork"
         await db.execute(
@@ -297,6 +288,6 @@ async def main():
 
     logger.info("Scraping completed successfully, checkpoint cleared.")
 
-    
+
 if __name__ == "__main__":
     asyncio.run(main())

@@ -71,10 +71,10 @@ async def post_json(
     json_data: dict,
     max_retries: int = 4,
     base_backoff: float = 0.5,
-    timeout: float = 20.0,
+    timeout: float = 120.0,
     headers=None,
     cookies=None,
-    semaphore: Semaphore = Semaphore(10)
+    semaphore: Semaphore = Semaphore(10),
 ) -> dict | list:
     """
     Robust POST + JSON parser with retries, exponential backoff, and semaphore limiting.
