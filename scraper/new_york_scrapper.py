@@ -14,7 +14,7 @@ from exporter import get_companies_for_today, generate_manifest, ensure_daily_fo
 
 
 load_dotenv()
-MAX_CONCURRENT_REQUESTS = 8
+MAX_CONCURRENT_REQUESTS = 16
 semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 # cookies = {
