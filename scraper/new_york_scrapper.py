@@ -273,7 +273,7 @@ async def main():
             logger.info("Resuming from prefix %s", last_prefix)
 
         BATCH_SIZE = 12
-        batches = [PREFIXES[i : i + BATCH_SIZE] for i in range(start_index, len(PREFIXES))]
+        batches = [PREFIXES[i : i + BATCH_SIZE] for i in range(start_index, len(PREFIXES), BATCH_SIZE)]
 
         async with async_session() as db:
             for batch in batches:
