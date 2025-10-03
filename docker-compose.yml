@@ -38,12 +38,12 @@ services:
     restart: unless-stopped
     networks:
       - scraper_network
-    # healthcheck:
-    #   test: ["CMD", "/usr/local/bin/healthcheck.sh"]
-    #   interval: 2m
-    #   timeout: 10s
-    #   retries: 3
-    #   start_period: 0s
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+      interval: 2m
+      timeout: 10s
+      retries: 3
+      start_period: 0s
 
 
 # Volumes

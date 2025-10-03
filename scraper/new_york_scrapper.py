@@ -234,33 +234,28 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
 
+# ---------------- Batch processor ----------------
 async def process_batch(session: aiohttp.ClientSession, batch: list[str]):
-    queue = asyncio.Queue()
-    for prefix in batch:
-        await queue.put(prefix)
+    tasks = []
+    async with async_session() as db:
+        for prefix in batch:
+            tasks.append(
+                asyncio.create_task(
+                    process_prefix(session, db, prefix)
+                )
+            )
+        await asyncio.gather(*tasks, return_exceptions=True)
 
-    async def worker():
-        while True:
-            try:
-                prefix = await queue.get()
-            except asyncio.QueueEmpty:
-                break
 
-            try:
-                async with semaphore:
-                    await get_entities_data(session, prefix)
-            except Exception as e:
-                logger.exception("Error processing prefix %s: %s", prefix, e)
-            finally:
-                async with async_session() as db:
-                    await save_checkpoint(db, prefix)
-                queue.task_done()
+async def process_prefix(session: aiohttp.ClientSession, db: AsyncSession, prefix: str):
+    try:
+        async with semaphore:
+            await get_entities_data(session, prefix)
+    except Exception as e:
+        logger.exception("Error processing prefix %s: %s", prefix, e)
+    finally:
+        await save_checkpoint(db, prefix)
 
-    workers = [asyncio.create_task(worker()) for _ in range(MAX_CONCURRENT_REQUESTS)]
-    await queue.join()
-
-    for w in workers:
-        w.cancel()
 
 # ---------------- Runner ----------------
 async def main():
@@ -280,15 +275,17 @@ async def main():
         BATCH_SIZE = 12
         batches = [PREFIXES[i : i + BATCH_SIZE] for i in range(start_index, len(PREFIXES))]
 
-        for batch in batches:
-            logger.info("Processing batch: %s", batch)
-            await process_batch(session, batch)
+        async with async_session() as db:
+            for batch in batches:
+                logger.info("Processing batch: %s", batch)
+                await process_batch(session, batch)
 
     async with async_session() as db:
         all_companies = await get_companies_for_today(session=db, state="NY")
 
-    output_dir = ensure_daily_folder(state="NY")
+    output_dir = ensure_daily_folder(state="NY", base_dir="/scraper_data")
     csv_file, ndjson_file = await asyncio.to_thread(export_data, all_companies, output_dir)
+
     crawl_errors = load_error_count()
     reset_error_count()
 
@@ -297,11 +294,11 @@ async def main():
         crawl_errors=crawl_errors,
         start_time=start_time,
         output_dir=output_dir,
+        generator="ny_scraper_v1",
     )
 
     logger.info("Daily export finished for %s companies", len(all_companies))
 
-    # Очищення чекпоінта після успішного завершення
     async with async_session() as db:
         checkpoint_id = f"daily_{date.today()}_newyork"
         await db.execute(

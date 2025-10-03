@@ -126,7 +126,7 @@ def write_manifest(
     return manifest_file
 
 
-async def generate_manifest(companies: list[Company], crawl_errors: int, start_time: datetime, output_dir: str = "/ny_new_business"):
+async def generate_manifest(companies: list[Company], crawl_errors: int, start_time: datetime, output_dir: str = "/ny_new_business", generator:str = "ny_exporter_v1"):
     now = datetime.now(timezone.utc)
     crawl_duration_seconds = (now - start_time).total_seconds()
 
@@ -148,7 +148,8 @@ async def generate_manifest(companies: list[Company], crawl_errors: int, start_t
         coverage_notes=coverage_notes,
         crawl_duration_seconds=crawl_duration_seconds,
         crawl_errors_total=crawl_errors,
-        output_dir=output_dir
+        output_dir=output_dir,
+        generator=generator
     )
 
     logger.info("Manifest created: %s", manifest_file)
