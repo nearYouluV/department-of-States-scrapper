@@ -2,7 +2,15 @@ import asyncio
 from datetime import datetime, timedelta, timezone, date
 import aiohttp
 from sqlalchemy import text
-from scraper.utils import PREFIXES, load_error_count, parse_date, post_json, reset_error_count, safe_get, persist_companies
+from scraper.utils import (
+    PREFIXES,
+    load_error_count,
+    parse_date,
+    post_json,
+    reset_error_count,
+    safe_get,
+    persist_companies,
+)
 from models import Company, ScraperCheckpoint, async_session
 from logger import logger
 from dotenv import load_dotenv
@@ -10,7 +18,13 @@ import os
 from models import Base, engine
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from exporter import get_companies_for_today, generate_manifest, ensure_daily_folder, export_data, init_daily_errors_file
+from exporter import (
+    get_companies_for_today,
+    generate_manifest,
+    ensure_daily_folder,
+    export_data,
+    init_daily_errors_file,
+)
 
 
 load_dotenv()
@@ -60,7 +74,13 @@ async def get_entities_data(session: aiohttp.ClientSession, prefix: str):
     url = "https://apps.dos.ny.gov/PublicInquiryWeb/api/PublicInquiry/GetComplexSearchMatchingEntities"
     # logger.info("Fetching entities for prefix: %s", prefix)
     data = await post_json(
-        session, url, json_data, headers=headers, cookies=cookies, semaphore=semaphore, max_retries=8
+        session,
+        url,
+        json_data,
+        headers=headers,
+        cookies=cookies,
+        semaphore=semaphore,
+        max_retries=8,
     )
     # logger.info("Fetched entities for prefix: %s", prefix)
     if not data:
@@ -168,8 +188,6 @@ async def get_detailed_entity_data(session: aiohttp.ClientSession, entity):
                 safe_get(n, "entityName")
                 for n in history.get("nameHistoryResultList", [])
             ]
-
-        logger.info("Prepared company: %s", company.entity_name)
         return company
 
     except Exception as e:
@@ -231,7 +249,7 @@ async def main():
             start_index = PREFIXES.index(last_prefix) + 1
             logger.info("Resuming from prefix %s", last_prefix)
 
-        BATCH_SIZE = 8  
+        BATCH_SIZE = 12
         batches = [
             PREFIXES[i : i + BATCH_SIZE] for i in range(start_index, len(PREFIXES))
         ]
@@ -248,13 +266,17 @@ async def main():
                         try:
                             await get_entities_data(session, prefix)
                         except Exception as e:
-                            logger.exception("Error processing prefix %s: %s", prefix, e)
+                            logger.exception(
+                                "Error processing prefix %s: %s", prefix, e
+                            )
                         finally:
                             async with async_session() as db:
                                 await save_checkpoint(db, prefix)
                     queue.task_done()
 
-            workers = [asyncio.create_task(worker()) for _ in range(MAX_CONCURRENT_REQUESTS)]
+            workers = [
+                asyncio.create_task(worker()) for _ in range(MAX_CONCURRENT_REQUESTS)
+            ]
             await queue.join()
             for w in workers:
                 w.cancel()
@@ -266,7 +288,9 @@ async def main():
         all_companies = await get_companies_for_today(session=db, state="NY")
 
     output_dir = ensure_daily_folder(state="NY")
-    csv_file, ndjson_file = await asyncio.to_thread(export_data, all_companies, output_dir)
+    csv_file, ndjson_file = await asyncio.to_thread(
+        export_data, all_companies, output_dir
+    )
     crawl_errors = load_error_count()
     reset_error_count()
     await generate_manifest(
