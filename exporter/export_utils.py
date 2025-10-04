@@ -43,6 +43,15 @@ def init_daily_errors_file(state: str, base_dir: str = "/scraper_data") -> Path:
     return errors_file
 
 
+def init_runtime_log_file(state: str, base_dir: str = "/scraper_data") -> Path:
+    """
+    """
+    daily_folder = ensure_daily_folder(state, base_dir=base_dir)
+    runtime_file = daily_folder / "runtime_log.txt"
+    if not runtime_file.exists():
+        runtime_file.touch()
+    return runtime_file
+
 # ---------------- Export CSV + NDJSON ----------------
 def export_data(companies: List[dict], output_dir: str, prefix: str = "entities") -> tuple[Path, Path]:
     """

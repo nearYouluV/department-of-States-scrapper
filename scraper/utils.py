@@ -11,7 +11,7 @@ from models import Company, async_session
 from sqlalchemy.dialects.postgresql import insert
 import pathlib
 from exporter import init_daily_errors_file
-TEMP_ERRORS_FILE = init_daily_errors_file(state="NY", base_dir="/tmp")
+TEMP_ERRORS_FILE = init_daily_errors_file(state="NY", base_dir="/scraper_data")
 
 alphabet = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 &()-'./")
 def generate_prefixes():

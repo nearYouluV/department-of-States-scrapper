@@ -23,8 +23,7 @@ from exporter import (
     generate_manifest,
     ensure_daily_folder,
     export_data,
-    init_daily_errors_file,
-)
+    )
 
 
 load_dotenv()
@@ -290,7 +289,7 @@ async def main():
     reset_error_count()
 
     await generate_manifest(
-        all_companies=all_companies,
+        companies=all_companies,
         crawl_errors=crawl_errors,
         start_time=start_time,
         output_dir=output_dir,
