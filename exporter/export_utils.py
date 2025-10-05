@@ -21,7 +21,19 @@ async def get_companies_for_today(session: AsyncSession, state: str = "NY") -> L
     companies = result.mappings().all()  
     return companies
 
-
+async def get_companies_for_yesterday(session: AsyncSession, state: str = "NY") -> List[dict]:
+    """
+    Отримати компанії, зареєстровані вчора у вказаному штаті.
+    """
+    query = text("""
+        SELECT *
+        FROM companies
+        WHERE source_state = :state
+        AND registration_date = CURRENT_DATE - INTERVAL '1 day'
+    """)
+    result = await session.execute(query, {"state": state})
+    companies = result.mappings().all()
+    return companies
 # ---------------- Daily Folder ----------------
 def ensure_daily_folder(state: str, base_dir: str = "/scraper_data") -> Path:
     """
@@ -103,37 +115,51 @@ def write_manifest(
     output_dir: str = "/ny_new_business"
 ):
     """
-    Creates manifest.json in daily output folder (YYYY/MM/DD).
-    Date is automatically today UTC.
+    Creates manifest.json if it doesn't exist, or updates only selected fields if it does.
     """
     now = datetime.now(timezone.utc)
-
-    # Daily folder path
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-
-    manifest = {
-        "date": now.strftime("%Y-%m-%d"),
-        "timezone": "UTC",
-        "source_state": source_state,
-        "entities_total": entities_total,
-        "officer_rows_total": officer_rows_total,
-        "pdfs_total": pdfs_total,
-        "officer_data_available": officer_data_available,
-        "pdfs_available": pdfs_available,
-        "coverage_notes": coverage_notes,
-        "crawl_duration_seconds": crawl_duration_seconds,
-        "crawl_errors_total": crawl_errors_total,
-        "generated_at": now.isoformat(),
-        "generator": generator
-    }
-
     manifest_file = output_dir / "manifest.json"
+
+    if manifest_file.exists():
+        # 🟡 Если файл есть — обновляем только указанные поля
+        try:
+            with open(manifest_file, "r", encoding="utf-8") as f:
+                manifest = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            manifest = {}
+        manifest.update({
+            "source_state": source_state,
+            "entities_total": entities_total,
+            "officer_rows_total": officer_rows_total,
+            "pdfs_total": pdfs_total,
+            "officer_data_available": officer_data_available,
+            "pdfs_available": pdfs_available,
+            "coverage_notes": coverage_notes,
+            "generated_at": now.isoformat(),
+        })
+    else:
+        manifest = {
+            "date": now.strftime("%Y-%m-%d %H:%M"),
+            "timezone": "UTC",
+            "source_state": source_state,
+            "entities_total": entities_total,
+            "officer_rows_total": officer_rows_total,
+            "pdfs_total": pdfs_total,
+            "officer_data_available": officer_data_available,
+            "pdfs_available": pdfs_available,
+            "coverage_notes": coverage_notes,
+            "crawl_duration_seconds": crawl_duration_seconds,
+            "crawl_errors_total": crawl_errors_total,
+            "generated_at": now.isoformat(),
+            "generator": generator,
+        }
+
     with open(manifest_file, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
     return manifest_file
-
 
 async def generate_manifest(companies: list[Company], crawl_errors: int, start_time: datetime, output_dir: str = "/ny_new_business", generator:str = "ny_exporter_v1"):
     now = datetime.now(timezone.utc)

@@ -2,7 +2,7 @@ import asyncio
 from datetime import datetime, timezone
 from models import async_session
 from logger import logger
-from exporter.export_utils import export_data, generate_manifest, ensure_daily_folder, get_companies_for_today, init_daily_errors_file
+from exporter.export_utils import export_data, generate_manifest, ensure_daily_folder, get_companies_for_today, get_companies_for_yesterday, init_daily_errors_file
 import os
 
 async def main():
@@ -11,6 +11,7 @@ async def main():
 
     async with async_session() as session:
         all_companies = await get_companies_for_today(session=session, state="NY")
+        # all_companies = await get_companies_for_yesterday(session=session, state="NY")
         export_data(all_companies, output_dir)
 
     await generate_manifest(
