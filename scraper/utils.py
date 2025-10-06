@@ -187,7 +187,7 @@ async def persist_companies(companies):
             'entity_subtype': getattr(c, 'entity_subtype', None),
             'status': getattr(c, 'status', None),
             'registration_date': getattr(c, 'registration_date', None),
-            'last_filing_date': getattr(c, 'last_filing_date', None),
+            'next_filing_date': getattr(c, 'next_filing_date', None),
             'expiration_date': getattr(c, 'expiration_date', None),
             'jurisdiction': getattr(c, 'jurisdiction', None),
             'principal_street': getattr(c, 'principal_street', None),

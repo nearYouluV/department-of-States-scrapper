@@ -18,7 +18,7 @@ class Company(Base):
 
     status: Mapped[str] = mapped_column(String(100), nullable=False)
     registration_date: Mapped[Optional[date]] = mapped_column(Date)
-    last_filing_date: Mapped[Optional[date]] = mapped_column(Date)
+    next_filing_date: Mapped[Optional[date]] = mapped_column(Date)
     expiration_date: Mapped[Optional[date]] = mapped_column(Date)
 
     jurisdiction: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)

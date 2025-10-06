@@ -140,7 +140,7 @@ async def get_detailed_entity_data(session: aiohttp.ClientSession, entity):
             registration_date=parse_date(
                 safe_get(data, "entityGeneralInfo", "dateOfInitialDosFiling")
             ),
-            last_filing_date=parse_date(
+            next_filing_date=parse_date(
                 safe_get(data, "entityGeneralInfo", "nextStatementDueDate")
             ),
             expiration_date=parse_date(
