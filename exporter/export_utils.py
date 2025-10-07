@@ -115,46 +115,50 @@ def write_manifest(
     output_dir: str = "/ny_new_business"
 ):
     """
-    Creates manifest.json if it doesn't exist, or updates only selected fields if it does.
+    Creates or updates manifest.json with crawl stats.
     """
     now = datetime.now(timezone.utc)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_file = output_dir / "manifest.json"
 
+    # Базовый словарь манифеста
+    manifest = {
+        "date": now.strftime("%Y-%m-%d %H:%M"),
+        "timezone": "UTC",
+        "source_state": source_state,
+        "entities_total": entities_total,
+        "officer_rows_total": officer_rows_total,
+        "pdfs_total": pdfs_total,
+        "officer_data_available": officer_data_available,
+        "pdfs_available": pdfs_available,
+        "coverage_notes": coverage_notes,
+        "crawl_duration_seconds": crawl_duration_seconds,
+        "crawl_errors_total": crawl_errors_total,
+        "generated_at": now.isoformat(),
+        "generator": generator,
+    }
+
     if manifest_file.exists():
-        # 🟡 Если файл есть — обновляем только указанные поля
         try:
             with open(manifest_file, "r", encoding="utf-8") as f:
-                manifest = json.load(f)
+                existing_manifest = json.load(f)
         except (json.JSONDecodeError, OSError):
-            manifest = {}
-        manifest.update({
-            "source_state": source_state,
-            "entities_total": entities_total,
-            "officer_rows_total": officer_rows_total,
-            "pdfs_total": pdfs_total,
-            "officer_data_available": officer_data_available,
-            "pdfs_available": pdfs_available,
-            "coverage_notes": coverage_notes,
-            "generated_at": now.isoformat(),
-        })
-    else:
-        manifest = {
-            "date": now.strftime("%Y-%m-%d %H:%M"),
-            "timezone": "UTC",
-            "source_state": source_state,
-            "entities_total": entities_total,
-            "officer_rows_total": officer_rows_total,
-            "pdfs_total": pdfs_total,
-            "officer_data_available": officer_data_available,
-            "pdfs_available": pdfs_available,
-            "coverage_notes": coverage_notes,
-            "crawl_duration_seconds": crawl_duration_seconds,
-            "crawl_errors_total": crawl_errors_total,
-            "generated_at": now.isoformat(),
-            "generator": generator,
-        }
+            existing_manifest = {}
+
+        # Обновляем только определённые поля, если это старый манифест
+        if "scraper" in existing_manifest.get("generator", ""):
+            existing_manifest.update({
+                "source_state": source_state,
+                "entities_total": entities_total,
+                "officer_rows_total": officer_rows_total,
+                "pdfs_total": pdfs_total,
+                "officer_data_available": officer_data_available,
+                "pdfs_available": pdfs_available,
+                "coverage_notes": coverage_notes,
+                "generated_at": now.isoformsat(),
+            })
+            manifest = existing_manifest
 
     with open(manifest_file, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2, ensure_ascii=False)
