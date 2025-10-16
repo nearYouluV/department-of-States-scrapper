@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import json
 import hashlib
 from typing import List
@@ -21,6 +21,21 @@ async def get_companies_for_today(session: AsyncSession, state: str = "NY") -> L
     companies = result.mappings().all()  
     return companies
 
+async def get_companies_for_date(session: AsyncSession, state: str, target_date: date) -> List[dict]:
+    """
+    """
+    query = text("""
+        SELECT * FROM companies
+        WHERE source_state = :state
+        AND next_filing_date = :target_date
+    """)
+    result = await session.execute(query, {
+        "state": state,
+        "target_date": target_date
+    })
+    companies = result.mappings().all()
+    return companies
+
 async def get_companies_for_yesterday(session: AsyncSession, state: str = "NY") -> List[dict]:
     """
     Отримати компанії, зареєстровані вчора у вказаному штаті.
@@ -35,12 +50,19 @@ async def get_companies_for_yesterday(session: AsyncSession, state: str = "NY") 
     companies = result.mappings().all()
     return companies
 # ---------------- Daily Folder ----------------
-def ensure_daily_folder(state: str, base_dir: str = "/scraper_data") -> Path:
+def ensure_daily_folder(state: str, base_dir: str = "/scraper_data", target_date: date | None = None) -> Path:
     """
-    {base_dir}/{state_lower}_new_business/YYYY/MM/DD
+      {base_dir}/{state_lower}_new_business/YYYY/MM/DD
     """
-    today = datetime.now(timezone.utc)
-    daily_folder = Path(base_dir) / f"{state.lower()}_new_business" / f"{today:%Y/%m/%d}"
+    if target_date is None:
+        target_date = datetime.now(timezone.utc).date()
+
+    daily_folder = (
+        Path(base_dir)
+        / f"{state.lower()}_new_business"
+        / f"{target_date:%Y/%m/%d}"
+    )
+
     daily_folder.mkdir(parents=True, exist_ok=True)
     return daily_folder
 

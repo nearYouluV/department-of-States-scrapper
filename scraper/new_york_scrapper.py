@@ -91,8 +91,8 @@ async def get_entities_data(session: aiohttp.ClientSession, prefix: str):
         logger.info("Empty searchResultList for prefix %s", prefix)
         return
 
-    # filter recent by initialFilingDate (>= yesterday)
-    cutoff = datetime.now().date() - timedelta(days=1)
+    # filter recent by initialFilingDate (>= 7 days ago)
+    cutoff = datetime.now().date() - timedelta(days=7)
     entities = []
     for entity in raw_list:
         try:
