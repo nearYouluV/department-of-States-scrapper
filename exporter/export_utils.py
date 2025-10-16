@@ -27,7 +27,7 @@ async def get_companies_for_date(session: AsyncSession, state: str, target_date:
     query = text("""
         SELECT * FROM companies
         WHERE source_state = :state
-        AND next_filing_date = :target_date
+        AND registration_date = :target_date
     """)
     result = await session.execute(query, {
         "state": state,
