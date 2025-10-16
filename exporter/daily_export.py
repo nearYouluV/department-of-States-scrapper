@@ -25,6 +25,7 @@ import os
 
 async def daily_export_for_date(session, state: str, date: datetime):
     start_time = datetime.now(timezone.utc)
+    logger.info("Starting export for %s", date.strftime("%Y-%m-%d"))
     output_dir = ensure_daily_folder(state=state, base_dir="/scraper_data", target_date=date)
 
     companies = await get_companies_for_date(session=session, state=state, target_date=date)
