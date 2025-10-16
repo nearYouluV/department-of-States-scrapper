@@ -178,7 +178,7 @@ def write_manifest(
                 "officer_data_available": officer_data_available,
                 "pdfs_available": pdfs_available,
                 "coverage_notes": coverage_notes,
-                "generated_at": now.isoformsat(),
+                "generated_at": now.isoformat(),
             })
             manifest = existing_manifest
 
