@@ -10,7 +10,7 @@ multidict==6.6.4
 numpy==2.3.3
 pandas==2.3.2
 propcache==0.3.2
-psutil==6.1.2
+psutil==7.1.1
 psycopg2-binary==2.9.10
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
