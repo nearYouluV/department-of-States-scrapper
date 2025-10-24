@@ -40,10 +40,16 @@ services:
       - scraper_network
     healthcheck:
       test: ["CMD", "/usr/local/bin/healthcheck.sh"]
-      interval: 2m
-      timeout: 10s
+      interval: 5m
+      timeout: 30s
       retries: 3
-      start_period: 0s
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
 
 
 # Volumes

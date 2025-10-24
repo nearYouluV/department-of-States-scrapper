@@ -44,12 +44,15 @@ async def main():
     state = "NY"
     today = datetime.now(timezone.utc).date()
 
-    async with async_session() as session:
-        # Запускаємо збір за останні 7 днів (включно з сьогоднішнім)
-        for i in range(7):
-            target_date = today - timedelta(days=i)
-            await daily_export_for_date(session, state, target_date)
+    # async with async_session() as session:
+    #     # Запускаємо збір за останні 7 днів (включно з сьогоднішнім)
+    #     for i in range(7):
+    #         target_date = today - timedelta(days=i)
+    #         await daily_export_for_date(session, state, target_date)
 
+    async with async_session() as session:
+        # Запускаємо збір лише за сьогоднішній день
+        await daily_export_for_date(session, state, today)
 def get_crawl_errors():
     TEMP_ERRORS_FILE = init_daily_errors_file(state="NY", base_dir="/tmp")
 
